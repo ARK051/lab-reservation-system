@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lab Reservation System · Login</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz@14..32&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="auth-wrapper">
+  <div class="auth-container">
+    <div class="auth-header">
+      <div class="header-icon"><i class="fas fa-flask"></i></div>
+      <h1>Lab Reservation System</h1>
+      <p>Sign in to book or manage lab time</p>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="login">Login</button>
+      <button class="tab-btn" data-tab="register">Register</button>
+    </div>
+
+    <form id="login-form" class="tab-panel active">
+      <div class="input-group">
+        <label for="login-email"><i class="fas fa-envelope"></i> Email</label>
+        <input type="email" id="login-email" required placeholder="you@campus.edu">
+      </div>
+      <div class="input-group">
+        <label for="login-password"><i class="fas fa-key"></i> Password</label>
+        <input type="password" id="login-password" required placeholder="Your password">
+      </div>
+      <button type="submit" class="primary-btn"><i class="fas fa-sign-in-alt"></i> Sign In</button>
+      <div id="login-error" class="error-message"></div>
+    </form>
+
+    <form id="register-form" class="tab-panel">
+      <div class="input-group">
+        <label for="reg-name"><i class="fas fa-user"></i> Full Name</label>
+        <input type="text" id="reg-name" required placeholder="Your full name">
+      </div>
+      <div class="input-group">
+        <label for="reg-email"><i class="fas fa-envelope"></i> Email</label>
+        <input type="email" id="reg-email" required placeholder="you@campus.edu">
+      </div>
+      <div class="input-group">
+        <label for="reg-password"><i class="fas fa-key"></i> Password</label>
+        <input type="password" id="reg-password" required placeholder="At least 6 characters" minlength="6">
+      </div>
+      <div class="input-group">
+        <label for="reg-role"><i class="fas fa-user-tag"></i> I am a</label>
+        <select id="reg-role" required>
+          <option value="student">Student</option>
+          <option value="lecturer">Lecturer</option>
+        </select>
+      </div>
+      <button type="submit" class="primary-btn"><i class="fas fa-user-plus"></i> Create Account</button>
+      <div id="register-error" class="error-message"></div>
+    </form>
+
+    <footer class="auth-footer">
+      <span>Cloud Computing · Akshay &amp; Clavio</span>
+    </footer>
+  </div>
+</div>
+<script type="module" src="auth.js"></script>
+</body>
+</html>
