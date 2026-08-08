@@ -11,6 +11,7 @@ const TIME_SLOTS = [
 
 const labSelect = document.getElementById('lab-select');
 const dateSelect = document.getElementById('date-select');
+const filterCheckbox = document.getElementById('filter-available-only');
 const slotGrid = document.getElementById('slot-grid');
 const reservationForm = document.getElementById('reservation-form');
 const selectedSlotInput = document.getElementById('selected-slot');
@@ -21,6 +22,7 @@ const toggleReservationsBtn = document.getElementById('toggle-reservations-btn')
 
 let currentUid = null;
 let labNameCache = {};
+let allLabs = [];
 let historyVisible = true;
 
 export function initBooking(uid) {
@@ -35,7 +37,8 @@ export function initBooking(uid) {
   buildModal();
 
   labSelect.addEventListener('change', renderSlots);
-  dateSelect.addEventListener('change', renderSlots);
+  dateSelect.addEventListener('change', populateLabDropdown);
+  filterCheckbox.addEventListener('change', populateLabDropdown);
   reservationForm.addEventListener('submit', submitReservation);
   toggleReservationsBtn.addEventListener('click', toggleReservationsView);
 }
@@ -50,15 +53,61 @@ function toggleReservationsView() {
 
 async function loadLabs() {
   const snapshot = await getDocs(collection(db, "labs"));
-  labSelect.innerHTML = '';
+  allLabs = [];
   labNameCache = {};
   snapshot.forEach(docSnap => {
-    labNameCache[docSnap.id] = docSnap.data().name;
-    const option = document.createElement('option');
-    option.value = docSnap.id;
-    option.textContent = docSnap.data().name;
-    labSelect.appendChild(option);
+    const data = docSnap.data();
+    labNameCache[docSnap.id] = data.name;
+    allLabs.push({ id: docSnap.id, name: data.name });
   });
+  await populateLabDropdown();
+}
+
+async function getAvailabilityMap(date) {
+  const q = query(collection(db, "reservations"), where("date", "==", date));
+  const snapshot = await getDocs(q);
+  const map = {};
+  snapshot.forEach(docSnap => {
+    const data = docSnap.data();
+    if (data.status === 'approved' || data.status === 'pending') {
+      if (!map[data.labId]) map[data.labId] = new Set();
+      map[data.labId].add(data.timeSlot);
+    }
+  });
+  return map;
+}
+
+async function populateLabDropdown() {
+  const date = dateSelect.value;
+  const previousSelection = labSelect.value;
+  let labsToShow = allLabs;
+
+  if (filterCheckbox.checked && date) {
+    const availabilityMap = await getAvailabilityMap(date);
+    labsToShow = allLabs.filter(lab => {
+      const taken = availabilityMap[lab.id] || new Set();
+      return taken.size < TIME_SLOTS.length;
+    });
+  }
+
+  labSelect.innerHTML = '';
+  if (labsToShow.length === 0) {
+    const option = document.createElement('option');
+    option.textContent = 'No labs with open slots';
+    option.disabled = true;
+    labSelect.appendChild(option);
+  } else {
+    labsToShow.forEach(lab => {
+      const option = document.createElement('option');
+      option.value = lab.id;
+      option.textContent = lab.name;
+      labSelect.appendChild(option);
+    });
+    if (labsToShow.some(l => l.id === previousSelection)) {
+      labSelect.value = previousSelection;
+    }
+  }
+
   renderSlots();
 }
 
@@ -142,7 +191,7 @@ async function submitReservation(e) {
 
     reservationForm.reset();
     reservationForm.style.display = 'none';
-    renderSlots();
+    populateLabDropdown();
   } catch (error) {
     bookingError.textContent = error.message;
     console.error(error);
@@ -196,8 +245,6 @@ function loadMyReservations(uid) {
         }
         myReservationsContainer.appendChild(item);
       });
-      // Re-apply current visibility state after every live update,
-      // otherwise a new reservation coming in would reset it to visible.
       myReservationsContainer.style.display = historyVisible ? 'flex' : 'none';
     },
     (error) => {
