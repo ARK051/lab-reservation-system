@@ -1,0 +1,15 @@
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+*.swp
+
+# Local env/secrets (if you ever add one)
+.env
+.env.local
+
+# Stray duplicate folders (learned this one the hard way)
+*-fresh/
