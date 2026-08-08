@@ -57,6 +57,7 @@ body {
 .status-approved .status-badge { background: #E6F4EA; color: #1E7E34; }
 .status-pending .status-badge { background: #FFF4E5; color: #B26A00; }
 .status-rejected .status-badge { background: #FCEAEA; color: #C62828; }
+.status-cancelled .status-badge { background: #EEF2FA; color: #5F6B85;}
 
 /* --- admin styles --- */
 .actions { display: flex; gap: 8px; }

@@ -5,15 +5,28 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js";
 
 const pendingContainer = document.getElementById('pending-requests');
+const allReservationsContainer = document.getElementById('all-reservations');
+const toggleAllReservationsBtn = document.getElementById('toggle-all-reservations-btn');
 const labListContainer = document.getElementById('lab-list');
 const addLabForm = document.getElementById('add-lab-form');
 
 let labNameCache = {};
+let allReservationsVisible = true;
 
 export function initAdmin() {
   loadPendingRequests();
+  loadAllReservations();
   loadLabs();
   addLabForm.addEventListener('submit', addLab);
+  toggleAllReservationsBtn.addEventListener('click', toggleAllReservationsView);
+}
+
+function toggleAllReservationsView() {
+  allReservationsVisible = !allReservationsVisible;
+  allReservationsContainer.style.display = allReservationsVisible ? 'flex' : 'none';
+  toggleAllReservationsBtn.innerHTML = allReservationsVisible
+    ? '<i class="fas fa-eye"></i>'
+    : '<i class="fas fa-eye-slash"></i>';
 }
 
 async function getLabNameMap() {
@@ -70,6 +83,38 @@ async function updateStatus(reservationId, newStatus) {
     alert('Could not update this request. Try again.');
     console.error(error);
   }
+}
+
+// --- "View all reservation requests" (matches the Use Case Diagram) ---
+function loadAllReservations() {
+  onSnapshot(collection(db, "reservations"), async (snapshot) => {
+    allReservationsContainer.innerHTML = '';
+    if (snapshot.empty) {
+      allReservationsContainer.innerHTML = '<p class="empty-state">No reservations yet.</p>';
+      return;
+    }
+
+    const labMap = await getLabNameMap();
+
+    const docs = snapshot.docs.sort((a, b) => b.data().date.localeCompare(a.data().date));
+
+    docs.forEach(docSnap => {
+      const data = docSnap.data();
+      const labName = labMap[data.labId] || 'Unknown lab';
+      const item = document.createElement('div');
+      item.className = `list-item status-${data.status}`;
+      item.innerHTML = `
+        <div>
+          <strong>${data.date} · ${data.timeSlot} · ${labName}</strong>
+          <p>${data.purpose}</p>
+        </div>
+        <span class="status-badge">${data.status}</span>
+      `;
+      allReservationsContainer.appendChild(item);
+    });
+
+    allReservationsContainer.style.display = allReservationsVisible ? 'flex' : 'none';
+  });
 }
 
 async function loadLabs() {
