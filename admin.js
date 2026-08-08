@@ -11,6 +11,7 @@ const labListContainer = document.getElementById('lab-list');
 const addLabForm = document.getElementById('add-lab-form');
 
 let labNameCache = {};
+let userInfoCache = {};
 let allReservationsVisible = true;
 
 export function initAdmin() {
@@ -38,6 +39,22 @@ async function getLabNameMap() {
   return map;
 }
 
+async function getUserInfoMap() {
+  const snapshot = await getDocs(collection(db, "users"));
+  const map = {};
+  snapshot.forEach(docSnap => {
+    const data = docSnap.data();
+    map[docSnap.id] = { name: data.name, role: data.role };
+  });
+  return map;
+}
+
+function bookerLine(userId) {
+  const info = userInfoCache[userId];
+  if (!info) return 'Unknown user';
+  return `${info.name} (${info.role})`;
+}
+
 function loadPendingRequests() {
   const q = query(collection(db, "reservations"), where("status", "==", "pending"));
 
@@ -49,6 +66,7 @@ function loadPendingRequests() {
     }
 
     labNameCache = await getLabNameMap();
+    userInfoCache = await getUserInfoMap();
 
     snapshot.forEach(docSnap => {
       const data = docSnap.data();
@@ -58,6 +76,7 @@ function loadPendingRequests() {
       item.innerHTML = `
         <div>
           <strong>${data.date} · ${data.timeSlot} · ${labName}</strong>
+          <p>${bookerLine(data.userId)}</p>
           <p>${data.purpose}</p>
         </div>
         <div class="actions">
@@ -95,6 +114,7 @@ function loadAllReservations() {
     }
 
     const labMap = await getLabNameMap();
+    userInfoCache = await getUserInfoMap();
 
     const docs = snapshot.docs.sort((a, b) => b.data().date.localeCompare(a.data().date));
 
@@ -106,6 +126,7 @@ function loadAllReservations() {
       item.innerHTML = `
         <div>
           <strong>${data.date} · ${data.timeSlot} · ${labName}</strong>
+          <p>${bookerLine(data.userId)}</p>
           <p>${data.purpose}</p>
         </div>
         <span class="status-badge">${data.status}</span>
