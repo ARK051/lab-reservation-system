@@ -8,29 +8,43 @@ const pendingContainer = document.getElementById('pending-requests');
 const labListContainer = document.getElementById('lab-list');
 const addLabForm = document.getElementById('add-lab-form');
 
+let labNameCache = {};
+
 export function initAdmin() {
   loadPendingRequests();
   loadLabs();
   addLabForm.addEventListener('submit', addLab);
 }
 
+async function getLabNameMap() {
+  const snapshot = await getDocs(collection(db, "labs"));
+  const map = {};
+  snapshot.forEach(docSnap => {
+    map[docSnap.id] = docSnap.data().name;
+  });
+  return map;
+}
+
 function loadPendingRequests() {
   const q = query(collection(db, "reservations"), where("status", "==", "pending"));
 
-  onSnapshot(q, (snapshot) => {
+  onSnapshot(q, async (snapshot) => {
     pendingContainer.innerHTML = '';
     if (snapshot.empty) {
       pendingContainer.innerHTML = '<p class="empty-state">No pending requests.</p>';
       return;
     }
 
+    labNameCache = await getLabNameMap();
+
     snapshot.forEach(docSnap => {
       const data = docSnap.data();
+      const labName = labNameCache[data.labId] || 'Unknown lab';
       const item = document.createElement('div');
       item.className = 'list-item';
       item.innerHTML = `
         <div>
-          <strong>${data.date} · ${data.timeSlot} · Lab: ${data.labId}</strong>
+          <strong>${data.date} · ${data.timeSlot} · ${labName}</strong>
           <p>${data.purpose}</p>
         </div>
         <div class="actions">

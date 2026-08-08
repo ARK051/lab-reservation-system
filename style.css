@@ -68,3 +68,21 @@ body {
   .slot-grid { grid-template-columns: repeat(2, 1fr); }
   .dashboard-header { flex-direction: column; gap: 12px; align-items: flex-start; }
 }
+
+/* --- reservation detail modal --- */
+.section-header { display: flex; align-items: center; justify-content: space-between; margin: 24px 0 12px; }
+.section-header h2 { margin: 0; }
+.toggle-btn { background: none; border: none; color: #5F6B85; cursor: pointer; font-size: 1.1rem; padding: 4px 8px; }
+.toggle-btn:hover { color: #1A73E8; }
+.view-btn { background: none; border: none; color: #5F6B85; cursor: pointer; font-size: 1rem; padding: 4px 8px; }
+.view-btn:hover { color: #1A73E8; }
+.cancel-btn { background: none; border: none; color: #C62828; cursor: pointer; font-size: 0.95rem; padding: 4px 8px; }
+.cancel-btn:hover { color: #8E1E1E; }
+
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(27,42,74,0.4); align-items: center; justify-content: center; z-index: 100; }
+.modal-overlay.show { display: flex; }
+.modal-box { background: #fff; border-radius: 16px; padding: 24px; width: 90%; max-width: 380px; position: relative; box-shadow: 0 20px 50px rgba(27,42,74,0.2); }
+.modal-box h3 { color: #0D47A1; margin-bottom: 14px; }
+.modal-box p { font-size: 0.9rem; margin-bottom: 8px; color: #1B2A4A; }
+.modal-close { position: absolute; top: 12px; right: 16px; background: none; border: none; font-size: 1.4rem; color: #9AA5BC; cursor: pointer; }
+.modal-close:hover { color: #C62828; }
