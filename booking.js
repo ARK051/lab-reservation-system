@@ -1,7 +1,7 @@
 import { db } from './firebase-config.js';
 import {
   collection, getDocs, query, where, orderBy,
-  doc, runTransaction, serverTimestamp, onSnapshot
+  doc, updateDoc, runTransaction, serverTimestamp, onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js";
 
 const TIME_SLOTS = [
@@ -17,8 +17,11 @@ const selectedSlotInput = document.getElementById('selected-slot');
 const purposeInput = document.getElementById('purpose');
 const bookingError = document.getElementById('booking-error');
 const myReservationsContainer = document.getElementById('my-reservations');
+const toggleReservationsBtn = document.getElementById('toggle-reservations-btn');
 
 let currentUid = null;
+let labNameCache = {};
+let historyVisible = true;
 
 export function initBooking(uid) {
   currentUid = uid;
@@ -29,16 +32,28 @@ export function initBooking(uid) {
 
   loadLabs();
   loadMyReservations(uid);
+  buildModal();
 
   labSelect.addEventListener('change', renderSlots);
   dateSelect.addEventListener('change', renderSlots);
   reservationForm.addEventListener('submit', submitReservation);
+  toggleReservationsBtn.addEventListener('click', toggleReservationsView);
+}
+
+function toggleReservationsView() {
+  historyVisible = !historyVisible;
+  myReservationsContainer.style.display = historyVisible ? 'flex' : 'none';
+  toggleReservationsBtn.innerHTML = historyVisible
+    ? '<i class="fas fa-eye"></i>'
+    : '<i class="fas fa-eye-slash"></i>';
 }
 
 async function loadLabs() {
   const snapshot = await getDocs(collection(db, "labs"));
   labSelect.innerHTML = '';
+  labNameCache = {};
   snapshot.forEach(docSnap => {
+    labNameCache[docSnap.id] = docSnap.data().name;
     const option = document.createElement('option');
     option.value = docSnap.id;
     option.textContent = docSnap.data().name;
@@ -128,9 +143,18 @@ async function submitReservation(e) {
     reservationForm.reset();
     reservationForm.style.display = 'none';
     renderSlots();
-    loadMyReservations(currentUid);
   } catch (error) {
     bookingError.textContent = error.message;
+    console.error(error);
+  }
+}
+
+async function cancelReservation(reservationId) {
+  if (!confirm('Cancel this reservation?')) return;
+  try {
+    await updateDoc(doc(db, "reservations", reservationId), { status: 'cancelled' });
+  } catch (error) {
+    alert('Could not cancel this reservation.');
     console.error(error);
   }
 }
@@ -142,24 +166,86 @@ function loadMyReservations(uid) {
     orderBy("createdAt", "desc")
   );
 
-  onSnapshot(q, (snapshot) => {
-    myReservationsContainer.innerHTML = '';
-    if (snapshot.empty) {
-      myReservationsContainer.innerHTML = '<p class="empty-state">No reservations yet.</p>';
-      return;
+  onSnapshot(
+    q,
+    (snapshot) => {
+      myReservationsContainer.innerHTML = '';
+      if (snapshot.empty) {
+        myReservationsContainer.innerHTML = '<p class="empty-state">No reservations yet.</p>';
+        return;
+      }
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        const item = document.createElement('div');
+        item.className = `list-item status-${data.status}`;
+        item.innerHTML = `
+          <div>
+            <strong>${data.date} · ${data.timeSlot}</strong>
+            <p>${data.purpose}</p>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span class="status-badge">${data.status}</span>
+            <button class="view-btn" title="View details"><i class="fas fa-eye"></i></button>
+            ${['pending', 'approved'].includes(data.status) ? '<button class="cancel-btn" title="Cancel"><i class="fas fa-times"></i></button>' : ''}
+          </div>
+        `;
+        item.querySelector('.view-btn').addEventListener('click', () => openModal(data));
+        const cancelBtn = item.querySelector('.cancel-btn');
+        if (cancelBtn) {
+          cancelBtn.addEventListener('click', () => cancelReservation(docSnap.id));
+        }
+        myReservationsContainer.appendChild(item);
+      });
+      // Re-apply current visibility state after every live update,
+      // otherwise a new reservation coming in would reset it to visible.
+      myReservationsContainer.style.display = historyVisible ? 'flex' : 'none';
+    },
+    (error) => {
+      console.error('Reservations listener error:', error);
+      myReservationsContainer.innerHTML = '<p class="empty-state">Could not load reservations.</p>';
     }
-    snapshot.forEach(docSnap => {
-      const data = docSnap.data();
-      const item = document.createElement('div');
-      item.className = `list-item status-${data.status}`;
-      item.innerHTML = `
-        <div>
-          <strong>${data.date} · ${data.timeSlot}</strong>
-          <p>${data.purpose}</p>
-        </div>
-        <span class="status-badge">${data.status}</span>
-      `;
-      myReservationsContainer.appendChild(item);
-    });
+  );
+}
+
+// --- Eye button: view details modal ---
+function buildModal() {
+  if (document.getElementById('reservation-modal')) return;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'reservation-modal';
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <button class="modal-close" id="modal-close-btn">&times;</button>
+      <h3>Reservation Details</h3>
+      <div id="modal-body"></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
   });
+  document.getElementById('modal-close-btn').addEventListener('click', closeModal);
+}
+
+function openModal(data) {
+  const labName = labNameCache[data.labId] || 'Unknown lab';
+  const submitted = data.createdAt?.toDate
+    ? data.createdAt.toDate().toLocaleString()
+    : 'Just now';
+
+  document.getElementById('modal-body').innerHTML = `
+    <p><strong>Lab:</strong> ${labName}</p>
+    <p><strong>Date:</strong> ${data.date}</p>
+    <p><strong>Time:</strong> ${data.timeSlot}</p>
+    <p><strong>Purpose:</strong> ${data.purpose}</p>
+    <p><strong>Status:</strong> <span class="status-badge">${data.status}</span></p>
+    <p><strong>Submitted:</strong> ${submitted}</p>
+  `;
+  document.getElementById('reservation-modal').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('reservation-modal').classList.remove('show');
 }
