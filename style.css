@@ -96,3 +96,7 @@ body {
 .card .primary-btn {
     margin-top: 12px;
 }
+
+/* --- link button --- */
+.link-btn { background: none; border: none; color: #1A73E8; font-size: 0.85rem; cursor: pointer; padding: 4px 0; text-align: left; text-decoration: underline; }
+.link-btn:hover { color: #0D47A1; }
