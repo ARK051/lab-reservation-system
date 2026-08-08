@@ -175,7 +175,11 @@ async function submitReservation(e) {
   try {
     await runTransaction(db, async (transaction) => {
       const existing = await transaction.get(reservationRef);
-      if (existing.exists()) {
+      // Only block if the existing document is an ACTIVE booking.
+      // A cancelled or rejected record at this same ID should be
+      // treated as available, since renderSlots() already treats
+      // it that way visually, this keeps both in agreement.
+      if (existing.exists() && ['pending', 'approved'].includes(existing.data().status)) {
         throw new Error('This slot was just booked by someone else. Please choose another.');
       }
       transaction.set(reservationRef, {
