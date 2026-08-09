@@ -78,6 +78,7 @@ function loadPendingRequests() {
           <strong>${data.date} · ${data.timeSlot} · ${labName}</strong>
           <p>${bookerLine(data.userId)}</p>
           <p>${data.purpose}</p>
+          ${data.equipmentDesc ? `<p>Equipment requested: ${data.equipmentDesc}</p>` : ''}
         </div>
         <div class="actions">
           <button class="reject-btn">Reject</button>
@@ -104,7 +105,6 @@ async function updateStatus(reservationId, newStatus) {
   }
 }
 
-// --- "View all reservation requests" (matches the Use Case Diagram) ---
 function loadAllReservations() {
   onSnapshot(collection(db, "reservations"), async (snapshot) => {
     allReservationsContainer.innerHTML = '';
@@ -128,6 +128,7 @@ function loadAllReservations() {
           <strong>${data.date} · ${data.timeSlot} · ${labName}</strong>
           <p>${bookerLine(data.userId)}</p>
           <p>${data.purpose}</p>
+          ${data.equipmentDesc ? `<p>Equipment requested: ${data.equipmentDesc}</p>` : ''}
         </div>
         <span class="status-badge">${data.status}</span>
       `;
@@ -152,7 +153,7 @@ async function loadLabs() {
     item.innerHTML = `
       <div>
         <strong>${data.name}</strong>
-        <p>Capacity: ${data.capacity}</p>
+        <p>Capacity: ${data.capacity}${data.equipment ? ' · ' + data.equipment : ''}</p>
       </div>
       <button class="reject-btn delete-lab-btn">Delete</button>
     `;
@@ -167,11 +168,13 @@ async function addLab(e) {
   e.preventDefault();
   const name = document.getElementById('new-lab-name').value.trim();
   const capacity = Number(document.getElementById('new-lab-capacity').value);
+  const equipment = document.getElementById('new-lab-equipment').value.trim();
   if (!name || !capacity) return;
 
-  await addDoc(collection(db, "labs"), { name, capacity });
+  await addDoc(collection(db, "labs"), { name, capacity, equipment });
   document.getElementById('new-lab-name').value = '';
   document.getElementById('new-lab-capacity').value = '';
+  document.getElementById('new-lab-equipment').value = '';
   loadLabs();
 }
 

@@ -16,27 +16,35 @@ const slotGrid = document.getElementById('slot-grid');
 const reservationForm = document.getElementById('reservation-form');
 const selectedSlotInput = document.getElementById('selected-slot');
 const purposeInput = document.getElementById('purpose');
+const equipmentDescInput = document.getElementById('equipment-desc');
 const bookingError = document.getElementById('booking-error');
 const myReservationsContainer = document.getElementById('my-reservations');
 const toggleReservationsBtn = document.getElementById('toggle-reservations-btn');
+const labEquipmentInfo = document.getElementById('lab-equipment-info');
 
 let currentUid = null;
 let labNameCache = {};
 let allLabs = [];
 let historyVisible = true;
 
+function todayStr() {
+  return new Date().toISOString().split('T')[0];
+}
+
 export function initBooking(uid) {
   currentUid = uid;
 
-  const today = new Date().toISOString().split('T')[0];
-  dateSelect.min = today;
-  dateSelect.value = today;
+  dateSelect.min = todayStr();
+  dateSelect.value = todayStr();
 
   loadLabs();
   loadMyReservations(uid);
   buildModal();
 
-  labSelect.addEventListener('change', renderSlots);
+  labSelect.addEventListener('change', () => {
+    showLabEquipment();
+    renderSlots();
+  });
   dateSelect.addEventListener('change', populateLabDropdown);
   filterCheckbox.addEventListener('change', populateLabDropdown);
   reservationForm.addEventListener('submit', submitReservation);
@@ -58,9 +66,16 @@ async function loadLabs() {
   snapshot.forEach(docSnap => {
     const data = docSnap.data();
     labNameCache[docSnap.id] = data.name;
-    allLabs.push({ id: docSnap.id, name: data.name });
+    allLabs.push({ id: docSnap.id, name: data.name, equipment: data.equipment || '' });
   });
   await populateLabDropdown();
+}
+
+function showLabEquipment() {
+  const selected = allLabs.find(lab => lab.id === labSelect.value);
+  labEquipmentInfo.textContent = selected && selected.equipment
+    ? `Equipment: ${selected.equipment}`
+    : '';
 }
 
 async function getAvailabilityMap(date) {
@@ -108,6 +123,7 @@ async function populateLabDropdown() {
     }
   }
 
+  showLabEquipment();
   renderSlots();
 }
 
@@ -116,7 +132,15 @@ async function renderSlots() {
   const date = dateSelect.value;
   slotGrid.innerHTML = '';
   reservationForm.style.display = 'none';
+  bookingError.textContent = '';
+
   if (!labId || !date) return;
+
+  if (date < todayStr()) {
+    bookingError.textContent = 'You cannot book a past date. Please pick today or a future date.';
+    dateSelect.value = todayStr();
+    return;
+  }
 
   const q = query(
     collection(db, "reservations"),
@@ -163,9 +187,15 @@ async function submitReservation(e) {
   const date = dateSelect.value;
   const timeSlot = selectedSlotInput.value;
   const purpose = purposeInput.value.trim();
+  const equipmentDesc = equipmentDescInput.value.trim();
 
   if (!labId || !date || !timeSlot || !purpose) {
     bookingError.textContent = 'Please fill in all fields.';
+    return;
+  }
+
+  if (date < todayStr()) {
+    bookingError.textContent = 'You cannot book a past date.';
     return;
   }
 
@@ -175,10 +205,6 @@ async function submitReservation(e) {
   try {
     await runTransaction(db, async (transaction) => {
       const existing = await transaction.get(reservationRef);
-      // Only block if the existing document is an ACTIVE booking.
-      // A cancelled or rejected record at this same ID should be
-      // treated as available, since renderSlots() already treats
-      // it that way visually, this keeps both in agreement.
       if (existing.exists() && ['pending', 'approved'].includes(existing.data().status)) {
         throw new Error('This slot was just booked by someone else. Please choose another.');
       }
@@ -186,6 +212,7 @@ async function submitReservation(e) {
         labId,
         userId: currentUid,
         purpose,
+        equipmentDesc,
         status: 'pending',
         date,
         timeSlot,
@@ -258,7 +285,6 @@ function loadMyReservations(uid) {
   );
 }
 
-// --- Eye button: view details modal ---
 function buildModal() {
   if (document.getElementById('reservation-modal')) return;
 
@@ -291,6 +317,7 @@ function openModal(data) {
     <p><strong>Date:</strong> ${data.date}</p>
     <p><strong>Time:</strong> ${data.timeSlot}</p>
     <p><strong>Purpose:</strong> ${data.purpose}</p>
+    ${data.equipmentDesc ? `<p><strong>Equipment requested:</strong> ${data.equipmentDesc}</p>` : ''}
     <p><strong>Status:</strong> <span class="status-badge">${data.status}</span></p>
     <p><strong>Submitted:</strong> ${submitted}</p>
   `;
