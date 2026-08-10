@@ -1,6 +1,6 @@
 import { db } from './firebase-config.js';
 import {
-  collection, getDocs, query, where, orderBy,
+  collection, getDocs, addDoc, query, where, orderBy,
   doc, updateDoc, runTransaction, serverTimestamp, onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js";
 
@@ -8,6 +8,9 @@ const TIME_SLOTS = [
   "08:00-09:00", "09:00-10:00", "10:00-11:00", "11:00-12:00",
   "13:00-14:00", "14:00-15:00", "15:00-16:00", "16:00-17:00"
 ];
+
+const CANCEL_LIMIT = 3;
+const COOLDOWN_MINUTES = 15;
 
 const labSelect = document.getElementById('lab-select');
 const dateSelect = document.getElementById('date-select');
@@ -29,6 +32,34 @@ let historyVisible = true;
 
 function todayStr() {
   return new Date().toISOString().split('T')[0];
+}
+
+function isSlotPast(date, slot) {
+  if (date !== todayStr()) return false;
+  const startStr = slot.split('-')[0];
+  const [h, m] = startStr.split(':').map(Number);
+  const slotStart = new Date();
+  slotStart.setHours(h, m, 0, 0);
+  return slotStart.getTime() <= Date.now();
+}
+
+async function checkCancellationCooldown(uid) {
+  const cutoff = Date.now() - COOLDOWN_MINUTES * 60 * 1000;
+  const q = query(collection(db, "cancellations"), where("userId", "==", uid));
+  const snapshot = await getDocs(q);
+
+  const recent = snapshot.docs.filter(d => {
+    const ts = d.data().cancelledAt;
+    return ts && ts.toMillis && ts.toMillis() > cutoff;
+  });
+
+  if (recent.length >= CANCEL_LIMIT) {
+    const earliest = Math.min(...recent.map(d => d.data().cancelledAt.toMillis()));
+    const unlockAt = earliest + COOLDOWN_MINUTES * 60 * 1000;
+    const minsLeft = Math.max(1, Math.ceil((unlockAt - Date.now()) / 60000));
+    return { blocked: true, minsLeft };
+  }
+  return { blocked: false };
 }
 
 export function initBooking(uid) {
@@ -101,7 +132,8 @@ async function populateLabDropdown() {
     const availabilityMap = await getAvailabilityMap(date);
     labsToShow = allLabs.filter(lab => {
       const taken = availabilityMap[lab.id] || new Set();
-      return taken.size < TIME_SLOTS.length;
+      const openSlots = TIME_SLOTS.filter(slot => !taken.has(slot) && !isSlotPast(date, slot));
+      return openSlots.length > 0;
     });
   }
 
@@ -161,8 +193,13 @@ async function renderSlots() {
     btn.type = 'button';
     btn.textContent = slot;
     btn.className = 'slot-btn';
+
     if (takenSlots.has(slot)) {
       btn.classList.add('taken');
+      btn.disabled = true;
+    } else if (isSlotPast(date, slot)) {
+      btn.classList.add('past');
+      btn.title = 'This time slot has already started or passed';
       btn.disabled = true;
     } else {
       btn.addEventListener('click', () => selectSlot(slot, btn));
@@ -199,6 +236,18 @@ async function submitReservation(e) {
     return;
   }
 
+  if (isSlotPast(date, timeSlot)) {
+    bookingError.textContent = 'This time slot has already started or passed. Please choose another.';
+    renderSlots();
+    return;
+  }
+
+  const cooldown = await checkCancellationCooldown(currentUid);
+  if (cooldown.blocked) {
+    bookingError.textContent = `You've cancelled ${CANCEL_LIMIT} or more bookings recently. Please wait about ${cooldown.minsLeft} more minute(s) before booking again.`;
+    return;
+  }
+
   const reservationId = `${labId}_${date}_${timeSlot}`;
   const reservationRef = doc(db, "reservations", reservationId);
 
@@ -232,7 +281,15 @@ async function submitReservation(e) {
 async function cancelReservation(reservationId) {
   if (!confirm('Cancel this reservation?')) return;
   try {
-    await updateDoc(doc(db, "reservations", reservationId), { status: 'cancelled' });
+    await updateDoc(doc(db, "reservations", reservationId), {
+      status: 'cancelled',
+      cancelledAt: serverTimestamp()
+    });
+    await addDoc(collection(db, "cancellations"), {
+      userId: currentUid,
+      reservationId,
+      cancelledAt: serverTimestamp()
+    });
   } catch (error) {
     alert('Could not cancel this reservation.');
     console.error(error);
