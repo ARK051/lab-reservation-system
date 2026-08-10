@@ -13,6 +13,7 @@ const addLabForm = document.getElementById('add-lab-form');
 let labNameCache = {};
 let userInfoCache = {};
 let allReservationsVisible = true;
+let pendingRejectId = null;
 
 export function initAdmin() {
   loadPendingRequests();
@@ -20,6 +21,7 @@ export function initAdmin() {
   loadLabs();
   addLabForm.addEventListener('submit', addLab);
   toggleAllReservationsBtn.addEventListener('click', toggleAllReservationsView);
+  buildRejectModal();
 }
 
 function toggleAllReservationsView() {
@@ -89,22 +91,68 @@ function loadPendingRequests() {
         updateStatus(docSnap.id, 'approved')
       );
       item.querySelector('.reject-btn').addEventListener('click', () =>
-        updateStatus(docSnap.id, 'rejected')
+        openRejectModal(docSnap.id)
       );
       pendingContainer.appendChild(item);
     });
   });
 }
 
-async function updateStatus(reservationId, newStatus) {
+async function updateStatus(reservationId, newStatus, extraFields = {}) {
   try {
-    await updateDoc(doc(db, "reservations", reservationId), { status: newStatus });
+    await updateDoc(doc(db, "reservations", reservationId), { status: newStatus, ...extraFields });
   } catch (error) {
     alert('Could not update this request. Try again.');
     console.error(error);
   }
 }
 
+// --- Reject reason modal ---
+function buildRejectModal() {
+  if (document.getElementById('reject-modal')) return;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'reject-modal';
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <button class="modal-close" id="reject-modal-close-btn">&times;</button>
+      <h3>Reject Reservation</h3>
+      <p style="margin-bottom:10px;">Let the requester know why this is being rejected (optional, but helpful).</p>
+      <textarea id="reject-reason-input" class="reject-reason-textarea" placeholder="e.g. Lab already reserved for maintenance that day"></textarea>
+      <button id="confirm-reject-btn" class="primary-btn" style="margin-top:12px; background:#C62828;">
+        <i class="fas fa-times"></i> Confirm Reject
+      </button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeRejectModal();
+  });
+  document.getElementById('reject-modal-close-btn').addEventListener('click', closeRejectModal);
+  document.getElementById('confirm-reject-btn').addEventListener('click', submitRejection);
+}
+
+function openRejectModal(reservationId) {
+  pendingRejectId = reservationId;
+  document.getElementById('reject-reason-input').value = '';
+  document.getElementById('reject-modal').classList.add('show');
+}
+
+function closeRejectModal() {
+  document.getElementById('reject-modal').classList.remove('show');
+  pendingRejectId = null;
+}
+
+async function submitRejection() {
+  if (!pendingRejectId) return;
+  const reason = document.getElementById('reject-reason-input').value.trim();
+  await updateStatus(pendingRejectId, 'rejected', { rejectionReason: reason });
+  closeRejectModal();
+}
+
+// ---View all reservation requests---
 function loadAllReservations() {
   onSnapshot(collection(db, "reservations"), async (snapshot) => {
     allReservationsContainer.innerHTML = '';
@@ -129,6 +177,7 @@ function loadAllReservations() {
           <p>${bookerLine(data.userId)}</p>
           <p>${data.purpose}</p>
           ${data.equipmentDesc ? `<p>Equipment requested: ${data.equipmentDesc}</p>` : ''}
+          ${data.status === 'rejected' && data.rejectionReason ? `<p>Reason: ${data.rejectionReason}</p>` : ''}
         </div>
         <span class="status-badge">${data.status}</span>
       `;

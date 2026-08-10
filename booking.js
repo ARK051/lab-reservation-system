@@ -262,6 +262,7 @@ function loadMyReservations(uid) {
           <div>
             <strong>${data.date} · ${data.timeSlot}</strong>
             <p>${data.purpose}</p>
+            ${data.status === 'rejected' && data.rejectionReason ? `<p style="color:#C62828;">Reason: ${data.rejectionReason}</p>` : ''}
           </div>
           <div style="display:flex; align-items:center; gap:10px;">
             <span class="status-badge">${data.status}</span>
@@ -319,6 +320,7 @@ function openModal(data) {
     <p><strong>Purpose:</strong> ${data.purpose}</p>
     ${data.equipmentDesc ? `<p><strong>Equipment requested:</strong> ${data.equipmentDesc}</p>` : ''}
     <p><strong>Status:</strong> <span class="status-badge">${data.status}</span></p>
+    ${data.status === 'rejected' && data.rejectionReason ? `<p><strong>Rejection reason:</strong> ${data.rejectionReason}</p>` : ''}
     <p><strong>Submitted:</strong> ${submitted}</p>
   `;
   document.getElementById('reservation-modal').classList.add('show');
