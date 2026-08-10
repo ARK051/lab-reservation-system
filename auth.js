@@ -1,7 +1,8 @@
 import { auth, db } from './firebase-config.js';
 import {
   createUserWithEmailAndPassword,
-  signInWithEmailAndPassword
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js";
 import { doc, setDoc } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js";
 
@@ -32,7 +33,34 @@ loginForm.addEventListener('submit', async (e) => {
     await signInWithEmailAndPassword(auth, email, password);
     window.location.href = 'dashboard.html';
   } catch (error) {
-    loginError.textContent = 'Invalid email or password.';
+    if (error.code === 'auth/too-many-requests') {
+      loginError.textContent = 'Too many failed attempts. Please wait a few minutes before trying again.';
+    } else {
+      loginError.textContent = 'Invalid email or password.';
+    }
+    console.error(error);
+  }
+});
+
+// --- Forgot password ---
+const forgotPasswordLink = document.getElementById('forgot-password-link');
+
+forgotPasswordLink.addEventListener('click', async () => {
+  loginError.textContent = '';
+  let email = document.getElementById('login-email').value.trim();
+
+  if (!email) {
+    email = prompt('Enter your account email to receive a password reset link:');
+    if (!email) return;
+  }
+
+  try {
+    await sendPasswordResetEmail(auth, email.trim());
+    loginError.style.color = '#1E7E34';
+    loginError.textContent = 'Password reset email sent. Check your inbox.';
+  } catch (error) {
+    loginError.style.color = '';
+    loginError.textContent = 'Could not send reset email. Check the address and try again.';
     console.error(error);
   }
 });
@@ -48,14 +76,12 @@ registerForm.addEventListener('submit', async (e) => {
   const name = document.getElementById('reg-name').value.trim();
   const email = document.getElementById('reg-email').value.trim();
   const password = document.getElementById('reg-password').value;
-  const role = document.getElementById('reg-role').value; // "student" or "lecturer"
+  const role = document.getElementById('reg-role').value;
 
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const uid = userCredential.user.uid;
 
-    // This is what the dashboard reads to decide which section to show.
-    // Firebase Auth alone has no concept of "role" -- Firestore does.
     await setDoc(doc(db, "users", uid), { name, email, role });
 
     window.location.href = 'dashboard.html';

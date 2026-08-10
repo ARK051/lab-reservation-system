@@ -30,6 +30,7 @@
         <div class="input-group">
           <label for="lab-select">Lab</label>
           <select id="lab-select"></select>
+          <p id="lab-equipment-info" class="lab-equipment-note"></p>
           <label class="filter-checkbox">
             <input type="checkbox" id="filter-available-only">
             Only show labs with open slots
@@ -47,6 +48,10 @@
         <div class="input-group">
           <label for="purpose">Purpose</label>
           <textarea id="purpose" required placeholder="e.g. Group project testing"></textarea>
+        </div>
+        <div class="input-group">
+          <label for="equipment-desc">Additional equipment</label>
+          <textarea id="equipment-desc" placeholder="Do you need any extra equipment? If yes, type it here (optional)"></textarea>
         </div>
         <button type="submit" class="primary-btn"><i class="fas fa-paper-plane"></i> Submit Request</button>
         <div id="booking-error" class="error-message"></div>
@@ -67,11 +72,14 @@
 
     <h2>Manage Labs</h2>
     <div class="card">
-      <form id="add-lab-form" class="form-row">
-        <input type="text" id="new-lab-name" placeholder="Lab name (e.g. Lab 3)" required>
-        <input type="number" id="new-lab-capacity" placeholder="Capacity" required min="1">
+      <form id="add-lab-form">
+        <div class="form-row">
+            <input type="text" id="new-lab-name" placeholder="Lab name (e.g. Lab 3)" required>
+            <input type="number" id="new-lab-capacity" placeholder="Capacity" required min="1">
+        </div>
+        <input type="text" id="new-lab-equipment" class="full-width-input" placeholder="Equipment available in this lab (e.g. Projector, Whiteboard, 20 Computers)">
         <button type="submit" class="primary-btn"><i class="fas fa-plus"></i> Add Lab</button>
-      </form>
+        </form>
     </div>
     <div id="lab-list" class="list-container"></div>
 

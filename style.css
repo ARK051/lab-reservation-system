@@ -54,6 +54,7 @@ body {
 .slot-btn { padding: 10px; border: 2px solid #DCE6F5; border-radius: 10px; background: #FAFBFF; cursor: pointer; font-size: 0.85rem; }
 .slot-btn.selected { border-color: #1A73E8; background: #E8F0FE; font-weight: 700; }
 .slot-btn.taken { background: #FCEAEA; color: #C62828; border-color: #F5C6C6; cursor: not-allowed; }
+.slot-btn.past { background: #EEF2FA; color: #5F6B85; border-color: #DCE6F5; cursor: not-allowed; }
 .status-approved .status-badge { background: #E6F4EA; color: #1E7E34; }
 .status-pending .status-badge { background: #FFF4E5; color: #B26A00; }
 .status-rejected .status-badge { background: #FCEAEA; color: #C62828; }
@@ -92,7 +93,71 @@ body {
 .filter-checkbox { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: #5F6B85; font-weight: 400; margin-top: 4px; cursor: pointer; }
 .filter-checkbox input { width: auto; padding: 0; cursor: pointer; }
 
+/* --- link button for forget password --- */
+.link-btn { background: none; border: none; color: #1A73E8; font-size: 0.85rem; cursor: pointer; padding: 4px 0; text-align: left; text-decoration: underline; }
+.link-btn:hover { color: #0D47A1; }
+
+/* --- lab equipment note --- */
+.lab-equipment-note { font-size: 0.8rem; color: #5F6B85; margin-top: 2px; }
+
 /* changed the margin of the primary button in the card to 12px */
 .card .primary-btn {
     margin-top: 12px;
+}
+
+/*added spacing below standalone input groups (like Purpose and Additional Equipment) */
+.card .input-group {
+  margin-bottom: 16px;
+}
+
+/*prevent double-spacing for input groups that are already inside a .form-row */
+.card .form-row .input-group {
+  margin-bottom: 0; 
+}
+
+/* --- Manage Labs form sizing --- */
+#add-lab-form .form-row input {
+  flex: 1;
+  min-width: 200px;
+  padding: 12px 14px;
+  border: 2px solid #DCE6F5;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  background: #FAFBFF;
+}
+#add-lab-form .form-row input:focus {
+  outline: none;
+  border-color: #1A73E8;
+}
+.full-width-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 2px solid #DCE6F5;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  background: #FAFBFF;
+  margin-bottom: 12px;
+}
+.full-width-input:focus {
+  outline: none;
+  border-color: #1A73E8;
+}
+
+/* --- reject reason modal --- */
+.reject-reason-textarea {
+  width: 100%;
+  min-height: 90px;
+  padding: 12px 14px;
+  border: 2px solid #DCE6F5;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  background: #FAFBFF;
+  resize: vertical;
+}
+.reject-reason-textarea:focus {
+  outline: none;
+  border-color: #1A73E8;
 }

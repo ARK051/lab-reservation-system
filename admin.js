@@ -13,6 +13,7 @@ const addLabForm = document.getElementById('add-lab-form');
 let labNameCache = {};
 let userInfoCache = {};
 let allReservationsVisible = true;
+let pendingRejectId = null;
 
 export function initAdmin() {
   loadPendingRequests();
@@ -20,6 +21,7 @@ export function initAdmin() {
   loadLabs();
   addLabForm.addEventListener('submit', addLab);
   toggleAllReservationsBtn.addEventListener('click', toggleAllReservationsView);
+  buildRejectModal();
 }
 
 function toggleAllReservationsView() {
@@ -78,6 +80,7 @@ function loadPendingRequests() {
           <strong>${data.date} · ${data.timeSlot} · ${labName}</strong>
           <p>${bookerLine(data.userId)}</p>
           <p>${data.purpose}</p>
+          ${data.equipmentDesc ? `<p>Equipment requested: ${data.equipmentDesc}</p>` : ''}
         </div>
         <div class="actions">
           <button class="reject-btn">Reject</button>
@@ -88,27 +91,82 @@ function loadPendingRequests() {
         updateStatus(docSnap.id, 'approved')
       );
       item.querySelector('.reject-btn').addEventListener('click', () =>
-        updateStatus(docSnap.id, 'rejected')
+        openRejectModal(docSnap.id)
       );
       pendingContainer.appendChild(item);
     });
   });
 }
 
-async function updateStatus(reservationId, newStatus) {
+async function updateStatus(reservationId, newStatus, extraFields = {}) {
   try {
-    await updateDoc(doc(db, "reservations", reservationId), { status: newStatus });
+    await updateDoc(doc(db, "reservations", reservationId), { status: newStatus, ...extraFields });
   } catch (error) {
     alert('Could not update this request. Try again.');
     console.error(error);
   }
 }
 
-// --- "View all reservation requests" (matches the Use Case Diagram) ---
+function buildRejectModal() {
+  if (document.getElementById('reject-modal')) return;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'reject-modal';
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <button class="modal-close" id="reject-modal-close-btn">&times;</button>
+      <h3>Reject Reservation</h3>
+      <p style="margin-bottom:10px;">Let the requester know why this is being rejected (optional, but helpful).</p>
+      <textarea id="reject-reason-input" class="reject-reason-textarea" placeholder="e.g. Lab already reserved for maintenance that day"></textarea>
+      <button id="confirm-reject-btn" class="primary-btn" style="margin-top:12px; background:#C62828;">
+        <i class="fas fa-times"></i> Confirm Reject
+      </button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeRejectModal();
+  });
+  document.getElementById('reject-modal-close-btn').addEventListener('click', closeRejectModal);
+  document.getElementById('confirm-reject-btn').addEventListener('click', submitRejection);
+}
+
+function openRejectModal(reservationId) {
+  pendingRejectId = reservationId;
+  document.getElementById('reject-reason-input').value = '';
+  document.getElementById('reject-modal').classList.add('show');
+}
+
+function closeRejectModal() {
+  document.getElementById('reject-modal').classList.remove('show');
+  pendingRejectId = null;
+}
+
+async function submitRejection() {
+  if (!pendingRejectId) return;
+  const reason = document.getElementById('reject-reason-input').value.trim();
+  await updateStatus(pendingRejectId, 'rejected', { rejectionReason: reason });
+  closeRejectModal();
+}
+
+async function hideFromAdminView(reservationId) {
+  if (!confirm("Remove this from the admin view? This only hides it here, the record stays in the system and is unaffected for the student/lecturer.")) return;
+  try {
+    await updateDoc(doc(db, "reservations", reservationId), { hiddenForAdmin: true });
+  } catch (error) {
+    alert('Could not remove this from view.');
+    console.error(error);
+  }
+}
+
 function loadAllReservations() {
   onSnapshot(collection(db, "reservations"), async (snapshot) => {
     allReservationsContainer.innerHTML = '';
-    if (snapshot.empty) {
+    const visibleDocs = snapshot.docs.filter(d => d.data().hiddenForAdmin !== true);
+
+    if (visibleDocs.length === 0) {
       allReservationsContainer.innerHTML = '<p class="empty-state">No reservations yet.</p>';
       return;
     }
@@ -116,9 +174,9 @@ function loadAllReservations() {
     const labMap = await getLabNameMap();
     userInfoCache = await getUserInfoMap();
 
-    const docs = snapshot.docs.sort((a, b) => b.data().date.localeCompare(a.data().date));
+    visibleDocs.sort((a, b) => b.data().date.localeCompare(a.data().date));
 
-    docs.forEach(docSnap => {
+    visibleDocs.forEach(docSnap => {
       const data = docSnap.data();
       const labName = labMap[data.labId] || 'Unknown lab';
       const item = document.createElement('div');
@@ -128,9 +186,15 @@ function loadAllReservations() {
           <strong>${data.date} · ${data.timeSlot} · ${labName}</strong>
           <p>${bookerLine(data.userId)}</p>
           <p>${data.purpose}</p>
+          ${data.equipmentDesc ? `<p>Equipment requested: ${data.equipmentDesc}</p>` : ''}
+          ${data.status === 'rejected' && data.rejectionReason ? `<p>Reason: ${data.rejectionReason}</p>` : ''}
         </div>
-        <span class="status-badge">${data.status}</span>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span class="status-badge">${data.status}</span>
+          <button class="hide-btn" title="Remove from admin view"><i class="fas fa-trash-alt"></i></button>
+        </div>
       `;
+      item.querySelector('.hide-btn').addEventListener('click', () => hideFromAdminView(docSnap.id));
       allReservationsContainer.appendChild(item);
     });
 
@@ -152,7 +216,7 @@ async function loadLabs() {
     item.innerHTML = `
       <div>
         <strong>${data.name}</strong>
-        <p>Capacity: ${data.capacity}</p>
+        <p>Capacity: ${data.capacity}${data.equipment ? ' · ' + data.equipment : ''}</p>
       </div>
       <button class="reject-btn delete-lab-btn">Delete</button>
     `;
@@ -167,11 +231,13 @@ async function addLab(e) {
   e.preventDefault();
   const name = document.getElementById('new-lab-name').value.trim();
   const capacity = Number(document.getElementById('new-lab-capacity').value);
+  const equipment = document.getElementById('new-lab-equipment').value.trim();
   if (!name || !capacity) return;
 
-  await addDoc(collection(db, "labs"), { name, capacity });
+  await addDoc(collection(db, "labs"), { name, capacity, equipment });
   document.getElementById('new-lab-name').value = '';
   document.getElementById('new-lab-capacity').value = '';
+  document.getElementById('new-lab-equipment').value = '';
   loadLabs();
 }
 

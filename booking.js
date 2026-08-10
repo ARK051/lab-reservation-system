@@ -1,6 +1,6 @@
 import { db } from './firebase-config.js';
 import {
-  collection, getDocs, query, where, orderBy,
+  collection, getDocs, addDoc, query, where, orderBy,
   doc, updateDoc, runTransaction, serverTimestamp, onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js";
 
@@ -9,6 +9,9 @@ const TIME_SLOTS = [
   "13:00-14:00", "14:00-15:00", "15:00-16:00", "16:00-17:00"
 ];
 
+const CANCEL_LIMIT = 3;
+const COOLDOWN_MINUTES = 15;
+
 const labSelect = document.getElementById('lab-select');
 const dateSelect = document.getElementById('date-select');
 const filterCheckbox = document.getElementById('filter-available-only');
@@ -16,27 +19,63 @@ const slotGrid = document.getElementById('slot-grid');
 const reservationForm = document.getElementById('reservation-form');
 const selectedSlotInput = document.getElementById('selected-slot');
 const purposeInput = document.getElementById('purpose');
+const equipmentDescInput = document.getElementById('equipment-desc');
 const bookingError = document.getElementById('booking-error');
 const myReservationsContainer = document.getElementById('my-reservations');
 const toggleReservationsBtn = document.getElementById('toggle-reservations-btn');
+const labEquipmentInfo = document.getElementById('lab-equipment-info');
 
 let currentUid = null;
 let labNameCache = {};
 let allLabs = [];
 let historyVisible = true;
 
+function todayStr() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function isSlotPast(date, slot) {
+  if (date !== todayStr()) return false;
+  const startStr = slot.split('-')[0];
+  const [h, m] = startStr.split(':').map(Number);
+  const slotStart = new Date();
+  slotStart.setHours(h, m, 0, 0);
+  return slotStart.getTime() <= Date.now();
+}
+
+async function checkCancellationCooldown(uid) {
+  const cutoff = Date.now() - COOLDOWN_MINUTES * 60 * 1000;
+  const q = query(collection(db, "cancellations"), where("userId", "==", uid));
+  const snapshot = await getDocs(q);
+
+  const recent = snapshot.docs.filter(d => {
+    const ts = d.data().cancelledAt;
+    return ts && ts.toMillis && ts.toMillis() > cutoff;
+  });
+
+  if (recent.length >= CANCEL_LIMIT) {
+    const earliest = Math.min(...recent.map(d => d.data().cancelledAt.toMillis()));
+    const unlockAt = earliest + COOLDOWN_MINUTES * 60 * 1000;
+    const minsLeft = Math.max(1, Math.ceil((unlockAt - Date.now()) / 60000));
+    return { blocked: true, minsLeft };
+  }
+  return { blocked: false };
+}
+
 export function initBooking(uid) {
   currentUid = uid;
 
-  const today = new Date().toISOString().split('T')[0];
-  dateSelect.min = today;
-  dateSelect.value = today;
+  dateSelect.min = todayStr();
+  dateSelect.value = todayStr();
 
   loadLabs();
   loadMyReservations(uid);
   buildModal();
 
-  labSelect.addEventListener('change', renderSlots);
+  labSelect.addEventListener('change', () => {
+    showLabEquipment();
+    renderSlots();
+  });
   dateSelect.addEventListener('change', populateLabDropdown);
   filterCheckbox.addEventListener('change', populateLabDropdown);
   reservationForm.addEventListener('submit', submitReservation);
@@ -58,9 +97,16 @@ async function loadLabs() {
   snapshot.forEach(docSnap => {
     const data = docSnap.data();
     labNameCache[docSnap.id] = data.name;
-    allLabs.push({ id: docSnap.id, name: data.name });
+    allLabs.push({ id: docSnap.id, name: data.name, equipment: data.equipment || '' });
   });
   await populateLabDropdown();
+}
+
+function showLabEquipment() {
+  const selected = allLabs.find(lab => lab.id === labSelect.value);
+  labEquipmentInfo.textContent = selected && selected.equipment
+    ? `Equipment: ${selected.equipment}`
+    : '';
 }
 
 async function getAvailabilityMap(date) {
@@ -86,7 +132,8 @@ async function populateLabDropdown() {
     const availabilityMap = await getAvailabilityMap(date);
     labsToShow = allLabs.filter(lab => {
       const taken = availabilityMap[lab.id] || new Set();
-      return taken.size < TIME_SLOTS.length;
+      const openSlots = TIME_SLOTS.filter(slot => !taken.has(slot) && !isSlotPast(date, slot));
+      return openSlots.length > 0;
     });
   }
 
@@ -108,6 +155,7 @@ async function populateLabDropdown() {
     }
   }
 
+  showLabEquipment();
   renderSlots();
 }
 
@@ -116,7 +164,15 @@ async function renderSlots() {
   const date = dateSelect.value;
   slotGrid.innerHTML = '';
   reservationForm.style.display = 'none';
+  bookingError.textContent = '';
+
   if (!labId || !date) return;
+
+  if (date < todayStr()) {
+    bookingError.textContent = 'You cannot book a past date. Please pick today or a future date.';
+    dateSelect.value = todayStr();
+    return;
+  }
 
   const q = query(
     collection(db, "reservations"),
@@ -137,8 +193,13 @@ async function renderSlots() {
     btn.type = 'button';
     btn.textContent = slot;
     btn.className = 'slot-btn';
+
     if (takenSlots.has(slot)) {
       btn.classList.add('taken');
+      btn.disabled = true;
+    } else if (isSlotPast(date, slot)) {
+      btn.classList.add('past');
+      btn.title = 'This time slot has already started or passed';
       btn.disabled = true;
     } else {
       btn.addEventListener('click', () => selectSlot(slot, btn));
@@ -163,9 +224,27 @@ async function submitReservation(e) {
   const date = dateSelect.value;
   const timeSlot = selectedSlotInput.value;
   const purpose = purposeInput.value.trim();
+  const equipmentDesc = equipmentDescInput.value.trim();
 
   if (!labId || !date || !timeSlot || !purpose) {
     bookingError.textContent = 'Please fill in all fields.';
+    return;
+  }
+
+  if (date < todayStr()) {
+    bookingError.textContent = 'You cannot book a past date.';
+    return;
+  }
+
+  if (isSlotPast(date, timeSlot)) {
+    bookingError.textContent = 'This time slot has already started or passed. Please choose another.';
+    renderSlots();
+    return;
+  }
+
+  const cooldown = await checkCancellationCooldown(currentUid);
+  if (cooldown.blocked) {
+    bookingError.textContent = `You've cancelled ${CANCEL_LIMIT} or more bookings recently. Please wait about ${cooldown.minsLeft} more minute(s) before booking again.`;
     return;
   }
 
@@ -175,10 +254,6 @@ async function submitReservation(e) {
   try {
     await runTransaction(db, async (transaction) => {
       const existing = await transaction.get(reservationRef);
-      // Only block if the existing document is an ACTIVE booking.
-      // A cancelled or rejected record at this same ID should be
-      // treated as available, since renderSlots() already treats
-      // it that way visually, this keeps both in agreement.
       if (existing.exists() && ['pending', 'approved'].includes(existing.data().status)) {
         throw new Error('This slot was just booked by someone else. Please choose another.');
       }
@@ -186,6 +261,7 @@ async function submitReservation(e) {
         labId,
         userId: currentUid,
         purpose,
+        equipmentDesc,
         status: 'pending',
         date,
         timeSlot,
@@ -205,7 +281,15 @@ async function submitReservation(e) {
 async function cancelReservation(reservationId) {
   if (!confirm('Cancel this reservation?')) return;
   try {
-    await updateDoc(doc(db, "reservations", reservationId), { status: 'cancelled' });
+    await updateDoc(doc(db, "reservations", reservationId), {
+      status: 'cancelled',
+      cancelledAt: serverTimestamp()
+    });
+    await addDoc(collection(db, "cancellations"), {
+      userId: currentUid,
+      reservationId,
+      cancelledAt: serverTimestamp()
+    });
   } catch (error) {
     alert('Could not cancel this reservation.');
     console.error(error);
@@ -235,6 +319,7 @@ function loadMyReservations(uid) {
           <div>
             <strong>${data.date} · ${data.timeSlot}</strong>
             <p>${data.purpose}</p>
+            ${data.status === 'rejected' && data.rejectionReason ? `<p style="color:#C62828;">Reason: ${data.rejectionReason}</p>` : ''}
           </div>
           <div style="display:flex; align-items:center; gap:10px;">
             <span class="status-badge">${data.status}</span>
@@ -258,7 +343,6 @@ function loadMyReservations(uid) {
   );
 }
 
-// --- Eye button: view details modal ---
 function buildModal() {
   if (document.getElementById('reservation-modal')) return;
 
@@ -291,7 +375,9 @@ function openModal(data) {
     <p><strong>Date:</strong> ${data.date}</p>
     <p><strong>Time:</strong> ${data.timeSlot}</p>
     <p><strong>Purpose:</strong> ${data.purpose}</p>
+    ${data.equipmentDesc ? `<p><strong>Equipment requested:</strong> ${data.equipmentDesc}</p>` : ''}
     <p><strong>Status:</strong> <span class="status-badge">${data.status}</span></p>
+    ${data.status === 'rejected' && data.rejectionReason ? `<p><strong>Rejection reason:</strong> ${data.rejectionReason}</p>` : ''}
     <p><strong>Submitted:</strong> ${submitted}</p>
   `;
   document.getElementById('reservation-modal').classList.add('show');
