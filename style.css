@@ -80,6 +80,8 @@ body {
 .view-btn:hover { color: #1A73E8; }
 .cancel-btn { background: none; border: none; color: #C62828; cursor: pointer; font-size: 0.95rem; padding: 4px 8px; }
 .cancel-btn:hover { color: #8E1E1E; }
+.hide-btn { background: none; border: none; color: #9AA5BC; cursor: pointer; font-size: 0.9rem; padding: 4px 8px; }
+.hide-btn:hover { color: #5F6B85; }
 
 .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(27,42,74,0.4); align-items: center; justify-content: center; z-index: 100; }
 .modal-overlay.show { display: flex; }

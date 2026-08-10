@@ -296,6 +296,16 @@ async function cancelReservation(reservationId) {
   }
 }
 
+async function hideFromMyHistory(reservationId) {
+  if (!confirm("Remove this from your history? This only hides it from your own view, the record stays in the system.")) return;
+  try {
+    await updateDoc(doc(db, "reservations", reservationId), { hiddenForUser: true });
+  } catch (error) {
+    alert('Could not remove this from your history.');
+    console.error(error);
+  }
+}
+
 function loadMyReservations(uid) {
   const q = query(
     collection(db, "reservations"),
@@ -307,11 +317,13 @@ function loadMyReservations(uid) {
     q,
     (snapshot) => {
       myReservationsContainer.innerHTML = '';
-      if (snapshot.empty) {
+      const visibleDocs = snapshot.docs.filter(d => d.data().hiddenForUser !== true);
+
+      if (visibleDocs.length === 0) {
         myReservationsContainer.innerHTML = '<p class="empty-state">No reservations yet.</p>';
         return;
       }
-      snapshot.forEach(docSnap => {
+      visibleDocs.forEach(docSnap => {
         const data = docSnap.data();
         const item = document.createElement('div');
         item.className = `list-item status-${data.status}`;
@@ -325,6 +337,7 @@ function loadMyReservations(uid) {
             <span class="status-badge">${data.status}</span>
             <button class="view-btn" title="View details"><i class="fas fa-eye"></i></button>
             ${['pending', 'approved'].includes(data.status) ? '<button class="cancel-btn" title="Cancel"><i class="fas fa-times"></i></button>' : ''}
+            <button class="hide-btn" title="Remove from my history"><i class="fas fa-trash-alt"></i></button>
           </div>
         `;
         item.querySelector('.view-btn').addEventListener('click', () => openModal(data));
@@ -332,6 +345,7 @@ function loadMyReservations(uid) {
         if (cancelBtn) {
           cancelBtn.addEventListener('click', () => cancelReservation(docSnap.id));
         }
+        item.querySelector('.hide-btn').addEventListener('click', () => hideFromMyHistory(docSnap.id));
         myReservationsContainer.appendChild(item);
       });
       myReservationsContainer.style.display = historyVisible ? 'flex' : 'none';
