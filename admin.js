@@ -107,7 +107,6 @@ async function updateStatus(reservationId, newStatus, extraFields = {}) {
   }
 }
 
-// --- Reject reason modal ---
 function buildRejectModal() {
   if (document.getElementById('reject-modal')) return;
 
@@ -152,11 +151,22 @@ async function submitRejection() {
   closeRejectModal();
 }
 
-// ---View all reservation requests---
+async function hideFromAdminView(reservationId) {
+  if (!confirm("Remove this from the admin view? This only hides it here, the record stays in the system and is unaffected for the student/lecturer.")) return;
+  try {
+    await updateDoc(doc(db, "reservations", reservationId), { hiddenForAdmin: true });
+  } catch (error) {
+    alert('Could not remove this from view.');
+    console.error(error);
+  }
+}
+
 function loadAllReservations() {
   onSnapshot(collection(db, "reservations"), async (snapshot) => {
     allReservationsContainer.innerHTML = '';
-    if (snapshot.empty) {
+    const visibleDocs = snapshot.docs.filter(d => d.data().hiddenForAdmin !== true);
+
+    if (visibleDocs.length === 0) {
       allReservationsContainer.innerHTML = '<p class="empty-state">No reservations yet.</p>';
       return;
     }
@@ -164,9 +174,9 @@ function loadAllReservations() {
     const labMap = await getLabNameMap();
     userInfoCache = await getUserInfoMap();
 
-    const docs = snapshot.docs.sort((a, b) => b.data().date.localeCompare(a.data().date));
+    visibleDocs.sort((a, b) => b.data().date.localeCompare(a.data().date));
 
-    docs.forEach(docSnap => {
+    visibleDocs.forEach(docSnap => {
       const data = docSnap.data();
       const labName = labMap[data.labId] || 'Unknown lab';
       const item = document.createElement('div');
@@ -179,8 +189,12 @@ function loadAllReservations() {
           ${data.equipmentDesc ? `<p>Equipment requested: ${data.equipmentDesc}</p>` : ''}
           ${data.status === 'rejected' && data.rejectionReason ? `<p>Reason: ${data.rejectionReason}</p>` : ''}
         </div>
-        <span class="status-badge">${data.status}</span>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span class="status-badge">${data.status}</span>
+          <button class="hide-btn" title="Remove from admin view"><i class="fas fa-trash-alt"></i></button>
+        </div>
       `;
+      item.querySelector('.hide-btn').addEventListener('click', () => hideFromAdminView(docSnap.id));
       allReservationsContainer.appendChild(item);
     });
 
