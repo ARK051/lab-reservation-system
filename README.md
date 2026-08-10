@@ -35,15 +35,17 @@ https://ARK051.github.io/lab-reservation-system/
 
 ## Project structure
 
+```
 lab-reservation-system/
-├── index.html → Login and register page
-├── dashboard.html → Shared dashboard, role-gated sections
-├── style.css → All styling
-├── firebase-config.js → Firebase project setup
-├── auth.js → Login, register, forgot password
-├── booking.js → Student/lecturer booking flow
-├── admin.js → PIC approval queue and lab management
+├── index.html            → Login and register page
+├── dashboard.html        → Shared dashboard, role-gated sections
+├── style.css              → All styling
+├── firebase-config.js  → Firebase project setup
+├── auth.js                    → Login, register, forgot password
+├── booking.js               → Student/lecturer booking flow
+├── admin.js                  → PIC approval queue and lab management
 └── README.md
+```
 
 ## Running this locally
 
